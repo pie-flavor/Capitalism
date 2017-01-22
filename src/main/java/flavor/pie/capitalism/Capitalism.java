@@ -13,6 +13,6 @@ public class Capitalism {
     Game game;
     @Listener
     public void preInit(GamePreInitializationEvent e) {
-
+        game.getDataManager().register(ShopData.class, ShopData.Immutable.class, new ShopData.Builder());
     }
 }
