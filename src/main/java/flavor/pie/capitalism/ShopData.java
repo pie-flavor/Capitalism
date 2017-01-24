@@ -16,7 +16,7 @@ import org.spongepowered.api.data.value.immutable.ImmutableMapValue;
 import org.spongepowered.api.data.value.immutable.ImmutableValue;
 import org.spongepowered.api.data.value.mutable.MapValue;
 import org.spongepowered.api.data.value.mutable.Value;
-import org.spongepowered.api.item.inventory.ItemStackSnapshot;
+import org.spongepowered.api.item.inventory.ItemStack;
 import org.spongepowered.api.service.economy.Currency;
 
 import java.math.BigDecimal;
@@ -31,7 +31,7 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
     int amount;
     Map<Currency, BigDecimal> buyPrice;
     boolean admin;
-    ItemStackSnapshot item;
+    ItemStack item;
     UUID owner;
     {
         registerGettersAndSetters();
@@ -43,10 +43,10 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
         amount = 0;
         admin = true;
         owner = ZERO_UUID;
-        item = ItemStackSnapshot.NONE;
+        item = null;
     }
 
-    ShopData(Map<Currency, BigDecimal> sellPrice, Map<Currency, BigDecimal> buyPrice, int amount, boolean admin, UUID owner, ItemStackSnapshot item) {
+    ShopData(Map<Currency, BigDecimal> sellPrice, Map<Currency, BigDecimal> buyPrice, int amount, boolean admin, UUID owner, ItemStack item) {
         this.sellPrice = Maps.newHashMap(sellPrice);
         this.amount = amount;
         this.buyPrice = Maps.newHashMap(buyPrice);
@@ -137,15 +137,15 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
         return Sponge.getRegistry().getValueFactory().createValue(ShopKeys.OWNER, owner);
     }
 
-    public ItemStackSnapshot getItem() {
+    public ItemStack getItem() {
         return item;
     }
 
-    public void setItem(ItemStackSnapshot item) {
+    public void setItem(ItemStack item) {
         this.item = item;
     }
 
-    public Value<ItemStackSnapshot> item() {
+    public Value<ItemStack> item() {
         return Sponge.getRegistry().getValueFactory().createValue(ShopKeys.ITEM_TYPE, item);
     }
 
@@ -176,7 +176,7 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
         container.getMap(ShopKeys.BUY_PRICE.getQuery()).ifPresent(m -> setBuyPrice(deserializeMap(m)));
         container.getMap(ShopKeys.SELL_PRICE.getQuery()).ifPresent(m -> setSellPrice(deserializeMap(m)));
         container.getObject(ShopKeys.OWNER.getQuery(), UUID.class).ifPresent(this::setOwner);
-        container.getObject(ShopKeys.ITEM_TYPE.getQuery(), ItemStackSnapshot.class).ifPresent(this::setItem);
+        container.getObject(ShopKeys.ITEM_TYPE.getQuery(), ItemStack.class).ifPresent(this::setItem);
         return Optional.of(this);
     }
 
@@ -234,7 +234,7 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
         int amount;
         boolean admin;
         UUID owner;
-        ItemStackSnapshot item;
+        ItemStack item;
 
         {
             registerGetters();
@@ -246,10 +246,10 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
             amount = 0;
             admin = true;
             owner = ShopData.ZERO_UUID;
-            item = ItemStackSnapshot.NONE;
+            item = null;
         }
 
-        Immutable(Map<Currency, BigDecimal> sellPrice, Map<Currency, BigDecimal> buyPrice, int amount, boolean admin, UUID owner, ItemStackSnapshot item) {
+        Immutable(Map<Currency, BigDecimal> sellPrice, Map<Currency, BigDecimal> buyPrice, int amount, boolean admin, UUID owner, ItemStack item) {
             this.sellPrice = ImmutableMap.copyOf(sellPrice);
             this.buyPrice = ImmutableMap.copyOf(buyPrice);
             this.amount = amount;
@@ -278,7 +278,7 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
             return owner;
         }
 
-        public ItemStackSnapshot getItem() {
+        public ItemStack getItem() {
             return item;
         }
 
@@ -302,7 +302,7 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
             return Sponge.getRegistry().getValueFactory().createValue(ShopKeys.OWNER, owner).asImmutable();
         }
 
-        public ImmutableValue<ItemStackSnapshot> item() {
+        public ImmutableValue<ItemStack> item() {
             return Sponge.getRegistry().getValueFactory().createValue(ShopKeys.ITEM_TYPE, item).asImmutable();
         }
 
