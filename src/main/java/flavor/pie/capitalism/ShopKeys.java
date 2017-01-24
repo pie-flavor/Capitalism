@@ -6,6 +6,7 @@ import org.spongepowered.api.data.key.Key;
 import org.spongepowered.api.data.key.KeyFactory;
 import org.spongepowered.api.data.value.mutable.MapValue;
 import org.spongepowered.api.data.value.mutable.Value;
+import org.spongepowered.api.item.inventory.ItemStackSnapshot;
 import org.spongepowered.api.service.economy.Currency;
 
 import java.math.BigDecimal;
@@ -19,6 +20,7 @@ public class ShopKeys {
     public final static Key<Value<Integer>> AMOUNT;
     public final static Key<Value<Boolean>> IS_ADMIN;
     public final static Key<Value<UUID>> OWNER;
+    public final static Key<Value<ItemStackSnapshot>> ITEM_TYPE;
     static {
         TypeToken<Map<Currency, BigDecimal>> mapToken = new TypeToken<Map<Currency, BigDecimal>>(){};
         TypeToken<MapValue<Currency, BigDecimal>> mapValueToken = new TypeToken<MapValue<Currency, BigDecimal>>(){};
@@ -27,5 +29,6 @@ public class ShopKeys {
         AMOUNT = KeyFactory.makeSingleKey(TypeToken.of(Integer.class), new TypeToken<Value<Integer>>(){}, DataQuery.of("Amount"), "capitalism:amount", "Amount");
         IS_ADMIN = KeyFactory.makeSingleKey(TypeToken.of(Boolean.class), new TypeToken<Value<Boolean>>(){}, DataQuery.of("Admin"), "capitalism:admin", "Admin");
         OWNER = KeyFactory.makeSingleKey(TypeToken.of(UUID.class), new TypeToken<Value<UUID>>(){}, DataQuery.of("Owner"), "capitalism:owner", "Owner");
+        ITEM_TYPE = KeyFactory.makeSingleKey(TypeToken.of(ItemStackSnapshot.class), new TypeToken<Value<ItemStackSnapshot>>(){}, DataQuery.of("ItemType"), "capitalism:itemtype", "Item Type");
     }
 }

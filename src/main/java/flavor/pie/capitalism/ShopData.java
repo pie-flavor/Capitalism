@@ -16,8 +16,8 @@ import org.spongepowered.api.data.value.immutable.ImmutableMapValue;
 import org.spongepowered.api.data.value.immutable.ImmutableValue;
 import org.spongepowered.api.data.value.mutable.MapValue;
 import org.spongepowered.api.data.value.mutable.Value;
+import org.spongepowered.api.item.inventory.ItemStackSnapshot;
 import org.spongepowered.api.service.economy.Currency;
-import org.spongepowered.api.util.Identifiable;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
@@ -31,6 +31,7 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
     int amount;
     Map<Currency, BigDecimal> buyPrice;
     boolean admin;
+    ItemStackSnapshot item;
     UUID owner;
     {
         registerGettersAndSetters();
@@ -42,14 +43,16 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
         amount = 0;
         admin = true;
         owner = ZERO_UUID;
+        item = ItemStackSnapshot.NONE;
     }
 
-    ShopData(Map<Currency, BigDecimal> sellPrice, Map<Currency, BigDecimal> buyPrice, int amount, boolean admin, UUID owner) {
+    ShopData(Map<Currency, BigDecimal> sellPrice, Map<Currency, BigDecimal> buyPrice, int amount, boolean admin, UUID owner, ItemStackSnapshot item) {
         this.sellPrice = Maps.newHashMap(sellPrice);
         this.amount = amount;
         this.buyPrice = Maps.newHashMap(buyPrice);
         this.admin = admin;
         this.owner = owner;
+        this.item = item;
     }
 
     @Override
@@ -69,6 +72,9 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
         registerFieldGetter(ShopKeys.OWNER, this::getOwner);
         registerFieldSetter(ShopKeys.OWNER, this::setOwner);
         registerKeyValue(ShopKeys.OWNER, this::owner);
+        registerFieldGetter(ShopKeys.ITEM_TYPE, this::getItem);
+        registerFieldSetter(ShopKeys.ITEM_TYPE, this::setItem);
+        registerKeyValue(ShopKeys.ITEM_TYPE, this::item);
     }
 
     public Map<Currency, BigDecimal> getSellPrice() {
@@ -131,6 +137,18 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
         return Sponge.getRegistry().getValueFactory().createValue(ShopKeys.OWNER, owner);
     }
 
+    public ItemStackSnapshot getItem() {
+        return item;
+    }
+
+    public void setItem(ItemStackSnapshot item) {
+        this.item = item;
+    }
+
+    public Value<ItemStackSnapshot> item() {
+        return Sponge.getRegistry().getValueFactory().createValue(ShopKeys.ITEM_TYPE, item);
+    }
+
     @Override
     public Optional<ShopData> fill(DataHolder dataHolder, MergeFunction overlap) {
         Optional<ShopData> that_ = dataHolder.get(ShopData.class);
@@ -142,10 +160,7 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
             this.amount = data.amount;
             this.sellPrice = Maps.newHashMap(data.sellPrice);
             this.owner = data.owner;
-        } else {
-            if (dataHolder instanceof Identifiable) {
-                owner = ((Identifiable) dataHolder).getUniqueId();
-            }
+            this.item = data.item;
         }
         return Optional.of(this);
     }
@@ -161,17 +176,18 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
         container.getMap(ShopKeys.BUY_PRICE.getQuery()).ifPresent(m -> setBuyPrice(deserializeMap(m)));
         container.getMap(ShopKeys.SELL_PRICE.getQuery()).ifPresent(m -> setSellPrice(deserializeMap(m)));
         container.getObject(ShopKeys.OWNER.getQuery(), UUID.class).ifPresent(this::setOwner);
+        container.getObject(ShopKeys.ITEM_TYPE.getQuery(), ItemStackSnapshot.class).ifPresent(this::setItem);
         return Optional.of(this);
     }
 
     @Override
     public ShopData copy() {
-        return new ShopData(sellPrice, buyPrice, amount, admin, owner);
+        return new ShopData(sellPrice, buyPrice, amount, admin, owner, item);
     }
 
     @Override
     public Immutable asImmutable() {
-        return new Immutable(sellPrice, buyPrice, amount, admin, owner);
+        return new Immutable(sellPrice, buyPrice, amount, admin, owner, item);
     }
 
     @Override
@@ -186,7 +202,8 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
                 .set(ShopKeys.AMOUNT.getQuery(), amount)
                 .set(ShopKeys.OWNER.getQuery(), owner)
                 .set(ShopKeys.BUY_PRICE.getQuery(), serializeMap(buyPrice))
-                .set(ShopKeys.SELL_PRICE.getQuery(), serializeMap(sellPrice));
+                .set(ShopKeys.SELL_PRICE.getQuery(), serializeMap(sellPrice))
+                .set(ShopKeys.ITEM_TYPE.getQuery(), item);
     }
 
     public static Map<String, String> serializeMap(Map<Currency, BigDecimal> map) {
@@ -217,6 +234,7 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
         int amount;
         boolean admin;
         UUID owner;
+        ItemStackSnapshot item;
 
         {
             registerGetters();
@@ -228,14 +246,16 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
             amount = 0;
             admin = true;
             owner = ShopData.ZERO_UUID;
+            item = ItemStackSnapshot.NONE;
         }
 
-        Immutable(Map<Currency, BigDecimal> sellPrice, Map<Currency, BigDecimal> buyPrice, int amount, boolean admin, UUID owner) {
+        Immutable(Map<Currency, BigDecimal> sellPrice, Map<Currency, BigDecimal> buyPrice, int amount, boolean admin, UUID owner, ItemStackSnapshot item) {
             this.sellPrice = ImmutableMap.copyOf(sellPrice);
             this.buyPrice = ImmutableMap.copyOf(buyPrice);
             this.amount = amount;
             this.admin = admin;
             this.owner = owner;
+            this.item = item;
         }
 
         public Map<Currency, BigDecimal> getSellPrice() {
@@ -258,6 +278,10 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
             return owner;
         }
 
+        public ItemStackSnapshot getItem() {
+            return item;
+        }
+
         public ImmutableMapValue<Currency, BigDecimal> sellPrice() {
             return Sponge.getRegistry().getValueFactory().createMapValue(ShopKeys.SELL_PRICE, sellPrice).asImmutable();
         }
@@ -278,6 +302,10 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
             return Sponge.getRegistry().getValueFactory().createValue(ShopKeys.OWNER, owner).asImmutable();
         }
 
+        public ImmutableValue<ItemStackSnapshot> item() {
+            return Sponge.getRegistry().getValueFactory().createValue(ShopKeys.ITEM_TYPE, item).asImmutable();
+        }
+
         @Override
         protected void registerGetters() {
             registerFieldGetter(ShopKeys.IS_ADMIN, this::isAdmin);
@@ -290,11 +318,13 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
             registerKeyValue(ShopKeys.OWNER, this::owner);
             registerFieldGetter(ShopKeys.AMOUNT, this::getAmount);
             registerKeyValue(ShopKeys.AMOUNT, this::amount);
+            registerFieldGetter(ShopKeys.ITEM_TYPE, this::getItem);
+            registerKeyValue(ShopKeys.ITEM_TYPE, this::item);
         }
 
         @Override
         public ShopData asMutable() {
-            return new ShopData(sellPrice, buyPrice, amount, admin, owner);
+            return new ShopData(sellPrice, buyPrice, amount, admin, owner, item);
         }
 
         @Override
@@ -309,7 +339,8 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
                     .set(ShopKeys.AMOUNT.getQuery(), amount)
                     .set(ShopKeys.OWNER.getQuery(), owner)
                     .set(ShopKeys.BUY_PRICE.getQuery(), serializeMap(buyPrice))
-                    .set(ShopKeys.SELL_PRICE.getQuery(), serializeMap(sellPrice));
+                    .set(ShopKeys.SELL_PRICE.getQuery(), serializeMap(sellPrice))
+                    .set(ShopKeys.ITEM_TYPE.getQuery(), item);
         }
     }
 
