@@ -268,7 +268,7 @@ public class Capitalism {
 
                 snapshot = snapshot.with(Keys.SIGN_LINES, ImmutableList.of(
                         user,
-                        Text.of(data.getItem()),
+                        Text.of(data.getAmount(), "x",data.getItem()),
                         line3,
                         line4
                 )).orElse(snapshot);
