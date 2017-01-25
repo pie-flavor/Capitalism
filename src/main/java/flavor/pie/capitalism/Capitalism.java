@@ -5,6 +5,7 @@ import com.google.inject.Inject;
 import flavor.pie.util.arguments.MoreArguments;
 import org.spongepowered.api.Game;
 import org.spongepowered.api.block.BlockSnapshot;
+import org.spongepowered.api.block.tileentity.TileEntity;
 import org.spongepowered.api.command.CommandException;
 import org.spongepowered.api.command.CommandResult;
 import org.spongepowered.api.command.CommandSource;
@@ -19,23 +20,36 @@ import org.spongepowered.api.entity.living.player.Player;
 import org.spongepowered.api.event.Listener;
 import org.spongepowered.api.event.block.ChangeBlockEvent;
 import org.spongepowered.api.event.block.InteractBlockEvent;
+import org.spongepowered.api.event.cause.Cause;
 import org.spongepowered.api.event.filter.cause.First;
 import org.spongepowered.api.event.game.state.GameInitializationEvent;
 import org.spongepowered.api.event.game.state.GamePreInitializationEvent;
 import org.spongepowered.api.item.ItemTypes;
+import org.spongepowered.api.item.inventory.Carrier;
 import org.spongepowered.api.item.inventory.ItemStack;
 import org.spongepowered.api.item.inventory.ItemStackSnapshot;
+import org.spongepowered.api.item.inventory.transaction.InventoryTransactionResult;
+import org.spongepowered.api.item.inventory.type.CarriedInventory;
 import org.spongepowered.api.plugin.Plugin;
+import org.spongepowered.api.plugin.PluginContainer;
 import org.spongepowered.api.scheduler.Task;
 import org.spongepowered.api.service.economy.Currency;
+import org.spongepowered.api.service.economy.EconomyService;
+import org.spongepowered.api.service.economy.account.UniqueAccount;
+import org.spongepowered.api.service.economy.transaction.ResultType;
+import org.spongepowered.api.service.economy.transaction.TransactionResult;
 import org.spongepowered.api.service.user.UserStorageService;
 import org.spongepowered.api.text.Text;
 import org.spongepowered.api.text.format.TextColors;
+import org.spongepowered.api.util.Direction;
+import org.spongepowered.api.util.Tristate;
 import org.spongepowered.api.world.Location;
 import org.spongepowered.api.world.World;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -44,6 +58,8 @@ import java.util.UUID;
 public class Capitalism {
     @Inject
     Game game;
+    @Inject
+    PluginContainer container;
     Map<UUID, ShopCreationContainer> map = new HashMap<>();
 
     @Listener
@@ -210,13 +226,94 @@ public class Capitalism {
 
     @Listener
     public void interact(InteractBlockEvent.Secondary e, @First Player p) {
+        Location<World> block = e.getTargetBlock().getLocation().get();
+        if (block.getBlockType().equals(ItemTypes.SIGN)) {
+            Optional<ShopData> data_ = block.get(ShopData.class);
+            if (data_.isPresent()) {
+                EconomyService svc = game.getServiceManager().provideUnchecked(EconomyService.class);
+                ShopData data = data_.get();
+                if (data.getOwner().equals(p.getUniqueId())) {
+                    //TODO test functionality
+                } else {
+                    if (!data.getSellPrice().isEmpty()) {
+                        Direction dir = block.get(Keys.DIRECTION).get();
+                        if (data.isAdmin()) {
+                            //TODO add admin
+                        } else if (!dir.isSecondaryOrdinal()) {
+                            if (p.get(Keys.IS_SNEAKING).get()) {
+                                Location<World> container = block.getBlockRelative(dir.getOpposite());
+                                Optional<TileEntity> tile_ = container.getTileEntity();
+                                if (tile_.isPresent()) {
+                                    TileEntity tile = tile_.get();
+                                    if (tile instanceof Carrier) {
+                                        Carrier carrier = (Carrier) tile;
+                                        CarriedInventory<? extends Carrier> inv = carrier.getInventory();
+                                        ItemStack stack = data.getItem().copy();
+                                        Optional<ItemStack> sold_ = p.getItemInHand(HandTypes.MAIN_HAND);
+                                        if (sold_.isPresent()) {
+                                            e.setUseBlockResult(Tristate.FALSE);
+                                            e.setUseItemResult(Tristate.FALSE);
+                                            ItemStack sold = sold_.get();
+                                            if (sold.getQuantity() < data.getAmount()) {
+                                                p.sendMessage(Text.of("You do not have enough items to sell here!"));
+                                                e.setCancelled(true);
+                                                return;
+                                            }
+                                            stack.setQuantity(sold.getQuantity());
+                                            if (!stack.equalTo(sold)) {
+                                                p.sendMessage(Text.of("This item is not of the correct type!"));
+                                                e.setCancelled(true);
+                                                return;
+                                            }
+                                            ItemStack soldFinal = sold.copy();
+                                            soldFinal.setQuantity(data.getAmount());
+                                            InventoryTransactionResult result = inv.offer(soldFinal);
+                                            if (!result.getRejectedItems().isEmpty()) {
+                                                p.sendMessage(Text.of("The storage does not have enough space!"));
+                                                e.setCancelled(true);
+                                                return;
+                                            }
+                                            UniqueAccount acct = svc.getOrCreateAccount(p.getUniqueId()).get();
+                                            List<Currency> currencies = new ArrayList<>();
+                                            for (Currency currency : data.getSellPrice().keySet()) {
+                                                TransactionResult res = acct.deposit(currency, data.getSellPrice().get(currency), Cause.source(container).build());
+                                                if (res.getResult() != ResultType.SUCCESS) {
+                                                    for (Currency currency2 : currencies) {
+                                                        acct.withdraw(currency, data.getSellPrice().get(currency), Cause.source(container).build());
+                                                    }
+                                                    p.sendMessage(Text.of("Unable to give you ", currency.format(data.getSellPrice().get(currency)), "!"));
+                                                    e.setCancelled(true);
+                                                    return;
+                                                } else {
+                                                    currencies.add(currency);
+                                                }
+                                            }
+                                            if (sold.getQuantity() == data.getAmount()) {
+                                                p.setItemInHand(HandTypes.MAIN_HAND, null);
+                                            } else {
+                                                sold.setQuantity(sold.getQuantity() - data.getAmount());
+                                                p.setItemInHand(HandTypes.MAIN_HAND, sold);
+                                            }
+                                            p.sendMessage(Text.of("Sold ", data.getAmount(), "x", data.getItem(), " for ", Text.of(currencies.stream().map(c -> c.format(data.getSellPrice().get(c))).toArray())));
+                                        }
+                                    }
+                                }
+                            } else {
+                                //TODO open book
+                            }
+                        }
+                    }
+                }
+            }
+        }
         if (p.getItemInHand(e.getHandType()).map(f -> f.get(ShopData.class)).isPresent()) {
-            Location<World> loc = e.getTargetBlock().getLocation().get().getBlockRelative(e.getTargetSide());
+            Location<World> loc = block.getBlockRelative(e.getTargetSide());
             cachedLocs.put(loc, p.getItemInHand(e.getHandType()).get().createSnapshot());
             Task.builder()
                     .delayTicks(1)
                     .execute(() -> cachedLocs.remove(loc));
         }
+
     }
 
     @Listener
@@ -276,4 +373,6 @@ public class Capitalism {
             }
         }
     }
+
+
 }
