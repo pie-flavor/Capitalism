@@ -4,25 +4,35 @@ import com.google.common.collect.ImmutableList;
 import com.google.inject.Inject;
 import flavor.pie.util.arguments.MoreArguments;
 import org.spongepowered.api.Game;
+import org.spongepowered.api.block.BlockSnapshot;
 import org.spongepowered.api.command.CommandException;
 import org.spongepowered.api.command.CommandResult;
 import org.spongepowered.api.command.CommandSource;
 import org.spongepowered.api.command.args.CommandContext;
 import org.spongepowered.api.command.args.GenericArguments;
 import org.spongepowered.api.command.spec.CommandSpec;
+import org.spongepowered.api.data.Transaction;
 import org.spongepowered.api.data.key.Keys;
 import org.spongepowered.api.data.type.HandType;
 import org.spongepowered.api.data.type.HandTypes;
 import org.spongepowered.api.entity.living.player.Player;
 import org.spongepowered.api.event.Listener;
+import org.spongepowered.api.event.block.ChangeBlockEvent;
+import org.spongepowered.api.event.block.InteractBlockEvent;
+import org.spongepowered.api.event.filter.cause.First;
 import org.spongepowered.api.event.game.state.GameInitializationEvent;
 import org.spongepowered.api.event.game.state.GamePreInitializationEvent;
 import org.spongepowered.api.item.ItemTypes;
 import org.spongepowered.api.item.inventory.ItemStack;
+import org.spongepowered.api.item.inventory.ItemStackSnapshot;
 import org.spongepowered.api.plugin.Plugin;
+import org.spongepowered.api.scheduler.Task;
 import org.spongepowered.api.service.economy.Currency;
+import org.spongepowered.api.service.user.UserStorageService;
 import org.spongepowered.api.text.Text;
 import org.spongepowered.api.text.format.TextColors;
+import org.spongepowered.api.world.Location;
+import org.spongepowered.api.world.World;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
@@ -75,6 +85,8 @@ public class Capitalism {
                 .child(admin, "admin", "@")
                 .child(apply, "apply", "!")
                 .build();
+
+        game.getCommandManager().register(this, shop, "shop");
     }
 
     private Player validatePlayer(CommandSource src) throws CommandException {
@@ -192,5 +204,76 @@ public class Capitalism {
         p.setItemInHand(hand, stack);
         p.sendMessage(Text.of("Converted your held signs to shop signs."));
         return CommandResult.success();
+    }
+
+    Map<Location<World>, ItemStackSnapshot> cachedLocs = new HashMap<>();
+
+    @Listener
+    public void interact(InteractBlockEvent.Secondary e, @First Player p) {
+        if (p.getItemInHand(e.getHandType()).map(f -> f.get(ShopData.class)).isPresent()) {
+            Location<World> loc = e.getTargetBlock().getLocation().get().getBlockRelative(e.getTargetSide());
+            cachedLocs.put(loc, p.getItemInHand(e.getHandType()).get().createSnapshot());
+            Task.builder()
+                    .delayTicks(1)
+                    .execute(() -> cachedLocs.remove(loc));
+        }
+    }
+
+    @Listener
+    public void place(ChangeBlockEvent.Place e) {
+        for (Transaction<BlockSnapshot> trans : e.getTransactions()) {
+            if (cachedLocs.containsKey(trans.getFinal().getLocation().get())) {
+                BlockSnapshot snapshot = trans.getFinal();
+                ItemStackSnapshot itemSnap = cachedLocs.remove(snapshot.getLocation().get());
+                ShopData.Immutable data = itemSnap.get(ShopData.Immutable.class).get();
+                snapshot = snapshot.with(data).orElse(snapshot);
+                Text user = Text.of(TextColors.BLUE, game.getServiceManager().provideUnchecked(UserStorageService.class).get(data.getOwner()).get().getName());
+                Text line3;
+                Text line4;
+                int buySize = data.getBuyPrice().size();
+                int sellSize = data.getSellPrice().size();
+                Map.Entry<Currency, BigDecimal> buy = buySize == 1 ? data.getBuyPrice().entrySet().iterator().next() : null;
+                Map.Entry<Currency, BigDecimal> sell = sellSize == 1 ? data.getSellPrice().entrySet().iterator().next() : null;
+                if (buySize > 1) {
+                    if (sellSize > 1) {
+                        line3 = Text.of("Right-click sign");
+                        line4 = Text.of("for price details.");
+                    } else if (sellSize == 0) {
+                        line3 = Text.of(TextColors.GREEN, "Right-click sign");
+                        line4 = Text.of(TextColors.GREEN, "for buy details.");
+                    } else {
+                        line3 = Text.of(TextColors.GREEN, "R-Click for info");
+                        line4 = Text.of(TextColors.RED, sell.getKey().format(sell.getValue()));
+                    }
+                } else if (buySize == 0) {
+                    if (sellSize > 1) {
+                        line3 = Text.of(TextColors.RED, "Right-click sign");
+                        line4 = Text.of(TextColors.RED, "for sell details.");
+                    } else {
+                        line3 = Text.of(TextColors.RED, "Sell price:");
+                        line4 = Text.of(TextColors.RED, sell.getKey().format(sell.getValue()));
+                    }
+                } else {
+                    if (sellSize > 1) {
+                        line3 = Text.of(TextColors.GREEN, buy.getKey().format(buy.getValue()));
+                        line4 = Text.of(TextColors.RED, "R-Click for info");
+                    } else if (sellSize == 0) {
+                        line3 = Text.of(TextColors.GREEN, "Buy price:");
+                        line4 = Text.of(TextColors.GREEN, buy.getKey().format(buy.getValue()));
+                    } else {
+                        line3 = Text.of(TextColors.GREEN, buy.getKey().format(buy.getValue()));
+                        line4 = Text.of(TextColors.RED, sell.getKey().format(sell.getValue()));
+                    }
+                }
+
+                snapshot = snapshot.with(Keys.SIGN_LINES, ImmutableList.of(
+                        user,
+                        Text.of(data.getItem()),
+                        line3,
+                        line4
+                )).orElse(snapshot);
+                trans.setCustom(snapshot);
+            }
+        }
     }
 }
