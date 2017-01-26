@@ -6,6 +6,7 @@ import flavor.pie.util.arguments.MoreArguments;
 import org.spongepowered.api.Game;
 import org.spongepowered.api.block.BlockSnapshot;
 import org.spongepowered.api.block.BlockTypes;
+import org.spongepowered.api.block.tileentity.Sign;
 import org.spongepowered.api.block.tileentity.TileEntity;
 import org.spongepowered.api.command.CommandException;
 import org.spongepowered.api.command.CommandResult;
@@ -15,6 +16,7 @@ import org.spongepowered.api.command.args.GenericArguments;
 import org.spongepowered.api.command.spec.CommandSpec;
 import org.spongepowered.api.data.Transaction;
 import org.spongepowered.api.data.key.Keys;
+import org.spongepowered.api.data.manipulator.mutable.tileentity.SignData;
 import org.spongepowered.api.data.type.HandType;
 import org.spongepowered.api.data.type.HandTypes;
 import org.spongepowered.api.entity.EntityTypes;
@@ -23,6 +25,7 @@ import org.spongepowered.api.entity.living.player.Player;
 import org.spongepowered.api.event.Listener;
 import org.spongepowered.api.event.block.ChangeBlockEvent;
 import org.spongepowered.api.event.block.InteractBlockEvent;
+import org.spongepowered.api.event.block.tileentity.ChangeSignEvent;
 import org.spongepowered.api.event.cause.Cause;
 import org.spongepowered.api.event.cause.entity.spawn.EntitySpawnCause;
 import org.spongepowered.api.event.cause.entity.spawn.SpawnTypes;
@@ -406,13 +409,12 @@ public class Capitalism {
     }
 
     @Listener
-    public void place(ChangeBlockEvent.Place e) {
-        for (Transaction<BlockSnapshot> trans : e.getTransactions()) {
-            if (cachedLocs.containsKey(trans.getFinal().getLocation().get())) {
-                BlockSnapshot snapshot = trans.getFinal();
-                ItemStackSnapshot itemSnap = cachedLocs.remove(snapshot.getLocation().get());
+    public void place(ChangeSignEvent e) {
+        Sign sign = e.getTargetTile();
+
+            if (cachedLocs.containsKey(sign.getLocation())) {
+                ItemStackSnapshot itemSnap = cachedLocs.remove(sign.getLocation());
                 ShopData.Immutable data = itemSnap.get(ShopData.Immutable.class).get();
-                snapshot = snapshot.with(data).orElse(snapshot);
                 Text user = data.isAdmin() ? Text.of(TextColors.BLUE, "Admin Shop") : Text.of(TextColors.BLUE, game.getServiceManager().provideUnchecked(UserStorageService.class).get(data.getOwner()).get().getName());
                 Text line3;
                 Text line4;
@@ -451,16 +453,14 @@ public class Capitalism {
                         line4 = Text.of(TextColors.RED, sell.getKey().format(sell.getValue()));
                     }
                 }
-
-                snapshot = snapshot.with(Keys.SIGN_LINES, ImmutableList.of(
-                        user,
-                        Text.of(data.getAmount(), "x",data.getItem()),
-                        line3,
-                        line4
-                )).orElse(snapshot);
-                trans.setCustom(snapshot);
+                SignData signi = sign.getOrCreate(SignData.class).get();
+                signi.set(signi.lines().set(0, user));
+                signi.set(signi.lines().set(1, Text.of(data.getAmount(), "x",data.getItem())));
+                signi.set(signi.lines().set(2, line3));
+                signi.set(signi.lines().set(3, line4));
+                sign.offer(signi);
             }
-        }
+        //}
     }
 
 
