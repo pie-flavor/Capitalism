@@ -408,7 +408,7 @@ public class Capitalism {
                 ItemStackSnapshot itemSnap = cachedLocs.remove(snapshot.getLocation().get());
                 ShopData.Immutable data = itemSnap.get(ShopData.Immutable.class).get();
                 snapshot = snapshot.with(data).orElse(snapshot);
-                Text user = Text.of(TextColors.BLUE, game.getServiceManager().provideUnchecked(UserStorageService.class).get(data.getOwner()).get().getName());
+                Text user = data.isAdmin() ? Text.of(TextColors.BLUE, "Admin Shop") : Text.of(TextColors.BLUE, game.getServiceManager().provideUnchecked(UserStorageService.class).get(data.getOwner()).get().getName());
                 Text line3;
                 Text line4;
                 int buySize = data.getBuyPrice().size();
