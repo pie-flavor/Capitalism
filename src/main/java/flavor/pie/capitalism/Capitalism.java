@@ -5,6 +5,7 @@ import com.google.inject.Inject;
 import flavor.pie.util.arguments.MoreArguments;
 import org.spongepowered.api.Game;
 import org.spongepowered.api.block.BlockSnapshot;
+import org.spongepowered.api.block.BlockTypes;
 import org.spongepowered.api.block.tileentity.TileEntity;
 import org.spongepowered.api.command.CommandException;
 import org.spongepowered.api.command.CommandResult;
@@ -26,10 +27,10 @@ import org.spongepowered.api.event.game.state.GameInitializationEvent;
 import org.spongepowered.api.event.game.state.GamePreInitializationEvent;
 import org.spongepowered.api.item.ItemTypes;
 import org.spongepowered.api.item.inventory.Carrier;
+import org.spongepowered.api.item.inventory.Inventory;
 import org.spongepowered.api.item.inventory.ItemStack;
 import org.spongepowered.api.item.inventory.ItemStackSnapshot;
 import org.spongepowered.api.item.inventory.transaction.InventoryTransactionResult;
-import org.spongepowered.api.item.inventory.type.CarriedInventory;
 import org.spongepowered.api.plugin.Plugin;
 import org.spongepowered.api.plugin.PluginContainer;
 import org.spongepowered.api.scheduler.Task;
@@ -41,7 +42,6 @@ import org.spongepowered.api.service.economy.transaction.TransactionResult;
 import org.spongepowered.api.service.user.UserStorageService;
 import org.spongepowered.api.text.Text;
 import org.spongepowered.api.text.format.TextColors;
-import org.spongepowered.api.util.Direction;
 import org.spongepowered.api.util.Tristate;
 import org.spongepowered.api.world.Location;
 import org.spongepowered.api.world.World;
@@ -234,73 +234,46 @@ public class Capitalism {
                 ShopData data = data_.get();
                 if (data.getOwner().equals(p.getUniqueId())) {
                     //TODO test functionality
-                } else {
-                    if (!data.getSellPrice().isEmpty()) {
-                        Direction dir = block.get(Keys.DIRECTION).get();
-                        if (data.isAdmin()) {
-                            //TODO add admin
-                        } else if (!dir.isSecondaryOrdinal()) {
-                            if (p.get(Keys.IS_SNEAKING).get()) {
-                                Location<World> container = block.getBlockRelative(dir.getOpposite());
-                                Optional<TileEntity> tile_ = container.getTileEntity();
-                                if (tile_.isPresent()) {
-                                    TileEntity tile = tile_.get();
-                                    if (tile instanceof Carrier) {
-                                        Carrier carrier = (Carrier) tile;
-                                        CarriedInventory<? extends Carrier> inv = carrier.getInventory();
-                                        ItemStack stack = data.getItem().copy();
-                                        Optional<ItemStack> sold_ = p.getItemInHand(HandTypes.MAIN_HAND);
-                                        if (sold_.isPresent()) {
-                                            e.setUseBlockResult(Tristate.FALSE);
-                                            e.setUseItemResult(Tristate.FALSE);
-                                            ItemStack sold = sold_.get();
-                                            if (sold.getQuantity() < data.getAmount()) {
-                                                p.sendMessage(Text.of("You do not have enough items to sell here!"));
-                                                e.setCancelled(true);
-                                                return;
-                                            }
-                                            stack.setQuantity(sold.getQuantity());
-                                            if (!stack.equalTo(sold)) {
-                                                p.sendMessage(Text.of("This item is not of the correct type!"));
-                                                e.setCancelled(true);
-                                                return;
-                                            }
-                                            ItemStack soldFinal = sold.copy();
-                                            soldFinal.setQuantity(data.getAmount());
-                                            InventoryTransactionResult result = inv.offer(soldFinal);
-                                            if (!result.getRejectedItems().isEmpty()) {
-                                                p.sendMessage(Text.of("The storage does not have enough space!"));
-                                                e.setCancelled(true);
-                                                return;
-                                            }
-                                            UniqueAccount acct = svc.getOrCreateAccount(p.getUniqueId()).get();
-                                            List<Currency> currencies = new ArrayList<>();
-                                            for (Currency currency : data.getSellPrice().keySet()) {
-                                                TransactionResult res = acct.deposit(currency, data.getSellPrice().get(currency), Cause.source(container).build());
-                                                if (res.getResult() != ResultType.SUCCESS) {
-                                                    for (Currency currency2 : currencies) {
-                                                        acct.withdraw(currency, data.getSellPrice().get(currency), Cause.source(container).build());
-                                                    }
-                                                    p.sendMessage(Text.of("Unable to give you ", currency.format(data.getSellPrice().get(currency)), "!"));
-                                                    e.setCancelled(true);
-                                                    return;
-                                                } else {
-                                                    currencies.add(currency);
-                                                }
-                                            }
-                                            if (sold.getQuantity() == data.getAmount()) {
-                                                p.setItemInHand(HandTypes.MAIN_HAND, null);
-                                            } else {
-                                                sold.setQuantity(sold.getQuantity() - data.getAmount());
-                                                p.setItemInHand(HandTypes.MAIN_HAND, sold);
-                                            }
-                                            p.sendMessage(Text.of("Sold ", data.getAmount(), "x", data.getItem(), " for ", Text.of(currencies.stream().map(c -> c.format(data.getSellPrice().get(c))).toArray())));
-                                        }
-                                    }
-                                }
-                            } else {
-                                //TODO open book
+                } else if (testShop(p, block) && testHeldItem(p, data)) {
+                    if (data.isAdmin()) {
+
+                    } else {
+                        Location<World> chest = block.getRelative(block.get(Keys.DIRECTION).get().getOpposite());
+                        if (testShopChest(p, block, chest)) {
+                            Inventory inv = ((Carrier) block.getRelative(block.get(Keys.DIRECTION).get().getOpposite()).getTileEntity().get()).getInventory();
+                            Optional<ItemStack> sold_ = p.getItemInHand(HandTypes.MAIN_HAND);
+                            e.setUseBlockResult(Tristate.FALSE);
+                            e.setUseItemResult(Tristate.FALSE);
+                            ItemStack sold = sold_.get();
+                            ItemStack soldFinal = sold.copy();
+                            soldFinal.setQuantity(data.getAmount());
+                            if (!attemptInsertion(p, soldFinal, inv)) {
+                                e.setCancelled(true);
+                                return;
                             }
+                            UniqueAccount acct = svc.getOrCreateAccount(p.getUniqueId()).get();
+                            UniqueAccount acct2 = svc.getOrCreateAccount(data.getOwner()).get();
+                            List<Currency> currencies = new ArrayList<>();
+                            for (Currency currency : data.getSellPrice().keySet()) {
+                                TransactionResult res = acct2.transfer(acct, currency, data.getSellPrice().get(currency), Cause.source(container).build());
+                                if (res.getResult() != ResultType.SUCCESS) {
+                                    for (Currency currency2 : currencies) {
+                                        acct.transfer(acct2, currency, data.getSellPrice().get(currency), Cause.source(container).build());
+                                    }
+                                    p.sendMessage(Text.of("Unable to give you ", currency.format(data.getSellPrice().get(currency)), "!"));
+                                    e.setCancelled(true);
+                                    return;
+                                } else {
+                                    currencies.add(currency);
+                                }
+                            }
+                            if (sold.getQuantity() == data.getAmount()) {
+                                p.setItemInHand(HandTypes.MAIN_HAND, null);
+                            } else {
+                                sold.setQuantity(sold.getQuantity() - data.getAmount());
+                                p.setItemInHand(HandTypes.MAIN_HAND, sold);
+                            }
+                            p.sendMessage(Text.of("Sold ", data.getAmount(), "x", data.getItem(), " for ", Text.of(currencies.stream().map(c -> c.format(data.getSellPrice().get(c))).toArray())));
                         }
                     }
                 }
@@ -314,6 +287,47 @@ public class Capitalism {
                     .execute(() -> cachedLocs.remove(loc));
         }
 
+    }
+
+    private boolean testShop(Player p, Location<World> sign) {
+        return sign.get(ShopData.class).isPresent() && sign.getBlockType().equals(BlockTypes.WALL_SIGN);
+    }
+
+    private boolean testShopChest(Player p, Location<World> sign, Location<World> chest) {
+        Optional<TileEntity> tile_ = chest.getTileEntity();
+        if (!tile_.isPresent()) {
+            return false;
+        }
+        TileEntity tile = tile_.get();
+        return tile instanceof Carrier;
+    }
+
+    private boolean testHeldItem(Player p, ShopData data) {
+        Optional<ItemStack> stack_ = p.getItemInHand(HandTypes.MAIN_HAND);
+        if (!stack_.isPresent()) {
+            return false;
+        }
+        ItemStack stack = stack_.get();
+        if (stack.getQuantity() < data.getAmount()) {
+            p.sendMessage(Text.of("You don't have enough items to sell here!"));
+            return false;
+        }
+        ItemStack test = data.getItem().copy();
+        test.setQuantity(stack.getQuantity());
+        if (!test.equalTo(stack)) {
+            p.sendMessage(Text.of("The item is of an invalid type!"));
+            return false;
+        }
+        return true;
+    }
+
+    private boolean attemptInsertion(Player p, ItemStack stack, Inventory inv) {
+        InventoryTransactionResult result = inv.offer(stack);
+        if (!result.getRejectedItems().isEmpty()) {
+            p.sendMessage(Text.of("The storage does not have enough space!"));
+            return false;
+        }
+        return true;
     }
 
     @Listener
