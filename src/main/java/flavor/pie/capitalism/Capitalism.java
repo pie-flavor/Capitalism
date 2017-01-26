@@ -411,7 +411,6 @@ public class Capitalism {
     @Listener
     public void place(ChangeSignEvent e) {
         Sign sign = e.getTargetTile();
-
             if (cachedLocs.containsKey(sign.getLocation())) {
                 ItemStackSnapshot itemSnap = cachedLocs.remove(sign.getLocation());
                 ShopData.Immutable data = itemSnap.get(ShopData.Immutable.class).get();
@@ -459,6 +458,7 @@ public class Capitalism {
                 signi.set(signi.lines().set(2, line3));
                 signi.set(signi.lines().set(3, line4));
                 sign.offer(signi);
+                e.setCancelled(true);
             }
         //}
     }
