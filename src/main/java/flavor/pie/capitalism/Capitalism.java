@@ -236,7 +236,7 @@ public class Capitalism {
         EconomyService svc = game.getServiceManager().provideUnchecked(EconomyService.class);
         if (testShop(p, block)) {
             ShopData data = block.get(ShopData.class).get();
-            if (data.getOwner().equals(p.getUniqueId())) {
+            if (data.getOwner().equals(p.getUniqueId()) && !data.isAdmin()) {
                 //TODO test functionality
                 return;
             }
