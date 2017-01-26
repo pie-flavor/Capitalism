@@ -30,6 +30,7 @@ jar.enabled = false
 
 build.dependsOn shadowJar
 signArchives.dependsOn shadowJar
+signArchives.enabled = false
 
 shadowJar {
     configurations = [project.configurations.shadow]
