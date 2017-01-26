@@ -6,6 +6,7 @@ import flavor.pie.util.arguments.MoreArguments;
 import org.spongepowered.api.Game;
 import org.spongepowered.api.block.BlockSnapshot;
 import org.spongepowered.api.block.BlockTypes;
+import org.spongepowered.api.block.tileentity.Sign;
 import org.spongepowered.api.block.tileentity.TileEntity;
 import org.spongepowered.api.command.CommandException;
 import org.spongepowered.api.command.CommandResult;
@@ -15,6 +16,7 @@ import org.spongepowered.api.command.args.GenericArguments;
 import org.spongepowered.api.command.spec.CommandSpec;
 import org.spongepowered.api.data.Transaction;
 import org.spongepowered.api.data.key.Keys;
+import org.spongepowered.api.data.manipulator.mutable.tileentity.SignData;
 import org.spongepowered.api.data.type.HandType;
 import org.spongepowered.api.data.type.HandTypes;
 import org.spongepowered.api.entity.EntityTypes;
@@ -23,6 +25,7 @@ import org.spongepowered.api.entity.living.player.Player;
 import org.spongepowered.api.event.Listener;
 import org.spongepowered.api.event.block.ChangeBlockEvent;
 import org.spongepowered.api.event.block.InteractBlockEvent;
+import org.spongepowered.api.event.block.tileentity.ChangeSignEvent;
 import org.spongepowered.api.event.cause.Cause;
 import org.spongepowered.api.event.cause.entity.spawn.EntitySpawnCause;
 import org.spongepowered.api.event.cause.entity.spawn.SpawnTypes;
@@ -232,130 +235,133 @@ public class Capitalism {
 
     @Listener
     public void interact(InteractBlockEvent.Secondary e, @First Player p) {
-        Location<World> block = e.getTargetBlock().getLocation().get();
-        EconomyService svc = game.getServiceManager().provideUnchecked(EconomyService.class);
-        if (testShop(p, block)) {
-            ShopData data = block.get(ShopData.class).get();
-            if (data.getOwner().equals(p.getUniqueId()) && !data.isAdmin()) {
-                //TODO test functionality
-                return;
-            }
-            if (testHeldItem(p, data)) {
-                if (data.isAdmin()) {
-                    e.setUseBlockResult(Tristate.FALSE);
-                    e.setUseItemResult(Tristate.FALSE);
-                    UniqueAccount acct = svc.getOrCreateAccount(p.getUniqueId()).get();
-                    List<Currency> currencies = new ArrayList<>();
-                    for (Currency currency : data.getSellPrice().keySet()) {
-                        TransactionResult res = acct.deposit(currency, data.getSellPrice().get(currency), Cause.source(container).build());
-                        if (res.getResult() != ResultType.SUCCESS) {
-                            for (Currency currency2 : currencies) {
-                                acct.withdraw(currency, data.getSellPrice().get(currency), Cause.source(container).build());
-                            }
-                            p.sendMessage(Text.of("Unable to give you ", currency.format(data.getSellPrice().get(currency)), "!"));
-                            e.setCancelled(true);
-                            return;
-                        } else {
-                            currencies.add(currency);
-                        }
-                    }
-                    ItemStack sold = p.getItemInHand(HandTypes.MAIN_HAND).get();
-                    if (sold.getQuantity() == data.getAmount()) {
-                        p.setItemInHand(HandTypes.MAIN_HAND, null);
-                    } else {
-                        sold.setQuantity(sold.getQuantity() - data.getAmount());
-                        p.setItemInHand(HandTypes.MAIN_HAND, sold);
-                    }
-                } else {
-                    //                        Location<World> chest = block.getRelative(block.get(Keys.DIRECTION).get().getOpposite());
-                    //                        if (testShopChest(p, block, chest)) {
-                    //                            Inventory inv = ((Carrier) block.getRelative(block.get(Keys.DIRECTION).get().getOpposite()).getTileEntity().get()).getInventory();
-                    //                            e.setUseBlockResult(Tristate.FALSE);
-                    //                            e.setUseItemResult(Tristate.FALSE);
-                    //                            ItemStack sold = p.getItemInHand(HandTypes.MAIN_HAND).get();
-                    //                            ItemStack test = sold.copy();
-                    //                            test.setQuantity(data.getAmount());
-                    //                            if (!attemptInsertion(p, sold, inv)) {
-                    //                                e.setCancelled(true);
-                    //                                return;
-                    //                            }
-                    //                            UniqueAccount acct = svc.getOrCreateAccount(p.getUniqueId()).get();
-                    //                            UniqueAccount acct2 = svc.getOrCreateAccount(data.getOwner()).get();
-                    //                            List<Currency> currencies = new ArrayList<>();
-                    //                            for (Currency currency : data.getSellPrice().keySet()) {
-                    //                                TransactionResult res = acct2.transfer(acct, currency, data.getSellPrice().get(currency), Cause.source(container).build());
-                    //                                if (res.getResult() != ResultType.SUCCESS) {
-                    //                                    for (Currency currency2 : currencies) {
-                    //                                        acct.transfer(acct2, currency, data.getSellPrice().get(currency), Cause.source(container).build());
-                    //                                    }
-                    //                                    p.sendMessage(Text.of("Unable to give you ", currency.format(data.getSellPrice().get(currency)), "!"));
-                    //                                    e.setCancelled(true);
-                    //                                    return;
-                    //                                } else {
-                    //                                    currencies.add(currency);
-                    //                                }
-                    //                            }
-                    //                            if (sold.getQuantity() == data.getAmount()) {
-                    //                                p.setItemInHand(HandTypes.MAIN_HAND, null);
-                    //                            } else {
-                    //                                sold.setQuantity(sold.getQuantity() - data.getAmount());
-                    //                                p.setItemInHand(HandTypes.MAIN_HAND, sold);
-                    //                            }
-                    //                            p.sendMessage(Text.of("Sold ", data.getAmount(), "x", data.getItem(), " for ", Text.of(currencies.stream().map(c -> c.format(data.getSellPrice().get(c))).toArray())));
-                    //                        }
-                }
-            }
-        }
-        if (p.getItemInHand(e.getHandType()).map(f -> f.get(ShopData.class)).isPresent()) {
-            Location<World> loc = block.getBlockRelative(e.getTargetSide());
-            cachedLocs.put(loc, p.getItemInHand(e.getHandType()).get().createSnapshot());
-            Task.builder()
-                    .delayTicks(1)
-                    .execute(() -> cachedLocs.remove(loc));
-        }
-
-    }
-
-    @Listener
-    public void interact(InteractBlockEvent.Primary e, @First Player p) {
-        Location<World> block = e.getTargetBlock().getLocation().get();
-        if (testShop(p, block)) {
-            ShopData data = block.get(ShopData.class).get();
-            if (p.get(Keys.IS_SNEAKING).get()) {
-                EconomyService svc = game.getServiceManager().provideUnchecked(EconomyService.class);
-                if (data.getOwner().equals(p.getUniqueId())) {
+        if (!(e.getTargetBlock() == BlockSnapshot.NONE)) {
+            Location<World> block = e.getTargetBlock().getLocation().get();
+            EconomyService svc = game.getServiceManager().provideUnchecked(EconomyService.class);
+            if (testShop(p, block)) {
+                ShopData data = block.get(ShopData.class).get();
+                if (data.getOwner().equals(p.getUniqueId()) && !data.isAdmin()) {
                     //TODO test functionality
                     return;
                 }
-                if (data.isAdmin()) {
-                    ItemStack bought = data.getItem().copy();
-                    UniqueAccount acct = svc.getOrCreateAccount(p.getUniqueId()).get();
-                    List<Currency> currencies = new ArrayList<>();
-                    for (Currency currency : data.getSellPrice().keySet()) {
-                        TransactionResult res = acct.withdraw(currency, data.getSellPrice().get(currency), Cause.source(container).build());
-                        if (res.getResult() != ResultType.SUCCESS) {
-                            for (Currency currency2 : currencies) {
-                                acct.deposit(currency, data.getSellPrice().get(currency), Cause.source(container).build());
+                if (testHeldItem(p, data)) {
+                    if (data.isAdmin()) {
+                        e.setUseBlockResult(Tristate.FALSE);
+                        e.setUseItemResult(Tristate.FALSE);
+                        UniqueAccount acct = svc.getOrCreateAccount(p.getUniqueId()).get();
+                        List<Currency> currencies = new ArrayList<>();
+                        for (Currency currency : data.getSellPrice().keySet()) {
+                            TransactionResult res = acct.deposit(currency, data.getSellPrice().get(currency), Cause.source(container).build());
+                            if (res.getResult() != ResultType.SUCCESS) {
+                                for (Currency currency2 : currencies) {
+                                    acct.withdraw(currency, data.getSellPrice().get(currency), Cause.source(container).build());
+                                }
+                                p.sendMessage(Text.of("Unable to give you ", currency.format(data.getSellPrice().get(currency)), "!"));
+                                e.setCancelled(true);
+                                return;
+                            } else {
+                                currencies.add(currency);
                             }
-                            p.sendMessage(Text.of("Unable to pay ", currency.format(data.getSellPrice().get(currency)), "!"));
-                            e.setCancelled(true);
-                            return;
+                        }
+                        ItemStack sold = p.getItemInHand(HandTypes.MAIN_HAND).get();
+                        if (sold.getQuantity() == data.getAmount()) {
+                            p.setItemInHand(HandTypes.MAIN_HAND, null);
                         } else {
-                            currencies.add(currency);
+                            sold.setQuantity(sold.getQuantity() - data.getAmount());
+                            p.setItemInHand(HandTypes.MAIN_HAND, sold);
                         }
+                    } else {
+                        //                        Location<World> chest = block.getRelative(block.get(Keys.DIRECTION).get().getOpposite());
+                        //                        if (testShopChest(p, block, chest)) {
+                        //                            Inventory inv = ((Carrier) block.getRelative(block.get(Keys.DIRECTION).get().getOpposite()).getTileEntity().get()).getInventory();
+                        //                            e.setUseBlockResult(Tristate.FALSE);
+                        //                            e.setUseItemResult(Tristate.FALSE);
+                        //                            ItemStack sold = p.getItemInHand(HandTypes.MAIN_HAND).get();
+                        //                            ItemStack test = sold.copy();
+                        //                            test.setQuantity(data.getAmount());
+                        //                            if (!attemptInsertion(p, sold, inv)) {
+                        //                                e.setCancelled(true);
+                        //                                return;
+                        //                            }
+                        //                            UniqueAccount acct = svc.getOrCreateAccount(p.getUniqueId()).get();
+                        //                            UniqueAccount acct2 = svc.getOrCreateAccount(data.getOwner()).get();
+                        //                            List<Currency> currencies = new ArrayList<>();
+                        //                            for (Currency currency : data.getSellPrice().keySet()) {
+                        //                                TransactionResult res = acct2.transfer(acct, currency, data.getSellPrice().get(currency), Cause.source(container).build());
+                        //                                if (res.getResult() != ResultType.SUCCESS) {
+                        //                                    for (Currency currency2 : currencies) {
+                        //                                        acct.transfer(acct2, currency, data.getSellPrice().get(currency), Cause.source(container).build());
+                        //                                    }
+                        //                                    p.sendMessage(Text.of("Unable to give you ", currency.format(data.getSellPrice().get(currency)), "!"));
+                        //                                    e.setCancelled(true);
+                        //                                    return;
+                        //                                } else {
+                        //                                    currencies.add(currency);
+                        //                                }
+                        //                            }
+                        //                            if (sold.getQuantity() == data.getAmount()) {
+                        //                                p.setItemInHand(HandTypes.MAIN_HAND, null);
+                        //                            } else {
+                        //                                sold.setQuantity(sold.getQuantity() - data.getAmount());
+                        //                                p.setItemInHand(HandTypes.MAIN_HAND, sold);
+                        //                            }
+                        //                            p.sendMessage(Text.of("Sold ", data.getAmount(), "x", data.getItem(), " for ", Text.of(currencies.stream().map(c -> c.format(data.getSellPrice().get(c))).toArray())));
+                        //                        }
                     }
-                    InventoryTransactionResult res = p.getInventory().offer(bought);
-                    if (!res.getRejectedItems().isEmpty()) {
-                        for (ItemStackSnapshot snap : res.getRejectedItems()) {
-                            Item item = (Item) p.getWorld().createEntity(EntityTypes.ITEM, p.getLocation().getPosition());
-                            item.offer(Keys.REPRESENTED_ITEM, snap);
-                            p.getWorld().spawnEntity(item, Cause.source(EntitySpawnCause.builder().entity(item).type(SpawnTypes.PLUGIN).build()).build());
-                            p.sendMessage(Text.of("Not enough space in your inventory to fit the items!"));
+                }
+            }
+            if (p.getItemInHand(e.getHandType()).map(f -> f.get(ShopData.class)).isPresent()) {
+                Location<World> loc = block.getBlockRelative(e.getTargetSide());
+                cachedLocs.put(loc, p.getItemInHand(e.getHandType()).get().createSnapshot());
+                Task.builder()
+                        .delayTicks(1)
+                        .execute(() -> cachedLocs.remove(loc));
+            }
+
+        }
+    }
+    @Listener
+    public void interact(InteractBlockEvent.Primary e, @First Player p) {
+        if (!(e.getTargetBlock() == BlockSnapshot.NONE)) {
+            Location<World> block = e.getTargetBlock().getLocation().get();
+            if (testShop(p, block)) {
+                ShopData data = block.get(ShopData.class).get();
+                if (p.get(Keys.IS_SNEAKING).get()) {
+                    EconomyService svc = game.getServiceManager().provideUnchecked(EconomyService.class);
+                    if (data.getOwner().equals(p.getUniqueId())) {
+                        //TODO test functionality
+                        return;
+                    }
+                    if (data.isAdmin()) {
+                        ItemStack bought = data.getItem().copy();
+                        UniqueAccount acct = svc.getOrCreateAccount(p.getUniqueId()).get();
+                        List<Currency> currencies = new ArrayList<>();
+                        for (Currency currency : data.getSellPrice().keySet()) {
+                            TransactionResult res = acct.withdraw(currency, data.getSellPrice().get(currency), Cause.source(container).build());
+                            if (res.getResult() != ResultType.SUCCESS) {
+                                for (Currency currency2 : currencies) {
+                                    acct.deposit(currency, data.getSellPrice().get(currency), Cause.source(container).build());
+                                }
+                                p.sendMessage(Text.of("Unable to pay ", currency.format(data.getSellPrice().get(currency)), "!"));
+                                e.setCancelled(true);
+                                return;
+                            } else {
+                                currencies.add(currency);
+                            }
                         }
+                        InventoryTransactionResult res = p.getInventory().offer(bought);
+                        if (!res.getRejectedItems().isEmpty()) {
+                            for (ItemStackSnapshot snap : res.getRejectedItems()) {
+                                Item item = (Item) p.getWorld().createEntity(EntityTypes.ITEM, p.getLocation().getPosition());
+                                item.offer(Keys.REPRESENTED_ITEM, snap);
+                                p.getWorld().spawnEntity(item, Cause.source(EntitySpawnCause.builder().entity(item).type(SpawnTypes.PLUGIN).build()).build());
+                                p.sendMessage(Text.of("Not enough space in your inventory to fit the items!"));
+                            }
+                        }
+                        p.sendMessage(Text.of("Bought ", data.getAmount(), "x", data.getItem(), " for ", Text.of(currencies.stream().map(c -> c.format(data.getSellPrice().get(c))).toArray())));
+                    } else {
+                        //TODO non-admin
                     }
-                    p.sendMessage(Text.of("Bought ", data.getAmount(), "x", data.getItem(), " for ", Text.of(currencies.stream().map(c -> c.format(data.getSellPrice().get(c))).toArray())));
-                } else {
-                    //TODO non-admin
                 }
             }
         }
@@ -403,13 +409,11 @@ public class Capitalism {
     }
 
     @Listener
-    public void place(ChangeBlockEvent.Place e) {
-        for (Transaction<BlockSnapshot> trans : e.getTransactions()) {
-            if (cachedLocs.containsKey(trans.getFinal().getLocation().get())) {
-                BlockSnapshot snapshot = trans.getFinal();
-                ItemStackSnapshot itemSnap = cachedLocs.remove(snapshot.getLocation().get());
+    public void place(ChangeSignEvent e) {
+        Sign sign = e.getTargetTile();
+            if (cachedLocs.containsKey(sign.getLocation())) {
+                ItemStackSnapshot itemSnap = cachedLocs.remove(sign.getLocation());
                 ShopData.Immutable data = itemSnap.get(ShopData.Immutable.class).get();
-                snapshot = snapshot.with(data).orElse(snapshot);
                 Text user = data.isAdmin() ? Text.of(TextColors.BLUE, "Admin Shop") : Text.of(TextColors.BLUE, game.getServiceManager().provideUnchecked(UserStorageService.class).get(data.getOwner()).get().getName());
                 Text line3;
                 Text line4;
@@ -448,16 +452,15 @@ public class Capitalism {
                         line4 = Text.of(TextColors.RED, sell.getKey().format(sell.getValue()));
                     }
                 }
-
-                snapshot = snapshot.with(Keys.SIGN_LINES, ImmutableList.of(
-                        user,
-                        Text.of(data.getAmount(), "x",data.getItem()),
-                        line3,
-                        line4
-                )).orElse(snapshot);
-                trans.setCustom(snapshot);
+                SignData signi = sign.getOrCreate(SignData.class).get();
+                signi.set(signi.lines().set(0, user));
+                signi.set(signi.lines().set(1, Text.of(data.getAmount(), "x",data.getItem())));
+                signi.set(signi.lines().set(2, line3));
+                signi.set(signi.lines().set(3, line4));
+                sign.offer(signi);
+                e.setCancelled(true);
             }
-        }
+        //}
     }
 
 
