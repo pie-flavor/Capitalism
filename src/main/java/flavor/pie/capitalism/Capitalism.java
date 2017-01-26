@@ -321,40 +321,42 @@ public class Capitalism {
         Location<World> block = e.getTargetBlock().getLocation().get();
         if (testShop(p, block)) {
             ShopData data = block.get(ShopData.class).get();
-            EconomyService svc = game.getServiceManager().provideUnchecked(EconomyService.class);
-            if (data.getOwner().equals(p.getUniqueId())) {
-                //TODO test functionality
-                return;
-            }
-            if (data.isAdmin()) {
-                ItemStack bought = data.getItem().copy();
-                UniqueAccount acct = svc.getOrCreateAccount(p.getUniqueId()).get();
-                List<Currency> currencies = new ArrayList<>();
-                for (Currency currency : data.getSellPrice().keySet()) {
-                    TransactionResult res = acct.withdraw(currency, data.getSellPrice().get(currency), Cause.source(container).build());
-                    if (res.getResult() != ResultType.SUCCESS) {
-                        for (Currency currency2 : currencies) {
-                            acct.deposit(currency, data.getSellPrice().get(currency), Cause.source(container).build());
+            if (p.get(Keys.IS_SNEAKING).get()) {
+                EconomyService svc = game.getServiceManager().provideUnchecked(EconomyService.class);
+                if (data.getOwner().equals(p.getUniqueId())) {
+                    //TODO test functionality
+                    return;
+                }
+                if (data.isAdmin()) {
+                    ItemStack bought = data.getItem().copy();
+                    UniqueAccount acct = svc.getOrCreateAccount(p.getUniqueId()).get();
+                    List<Currency> currencies = new ArrayList<>();
+                    for (Currency currency : data.getSellPrice().keySet()) {
+                        TransactionResult res = acct.withdraw(currency, data.getSellPrice().get(currency), Cause.source(container).build());
+                        if (res.getResult() != ResultType.SUCCESS) {
+                            for (Currency currency2 : currencies) {
+                                acct.deposit(currency, data.getSellPrice().get(currency), Cause.source(container).build());
+                            }
+                            p.sendMessage(Text.of("Unable to pay ", currency.format(data.getSellPrice().get(currency)), "!"));
+                            e.setCancelled(true);
+                            return;
+                        } else {
+                            currencies.add(currency);
                         }
-                        p.sendMessage(Text.of("Unable to pay ", currency.format(data.getSellPrice().get(currency)), "!"));
-                        e.setCancelled(true);
-                        return;
-                    } else {
-                        currencies.add(currency);
                     }
-                }
-                InventoryTransactionResult res = p.getInventory().offer(bought);
-                if (!res.getRejectedItems().isEmpty()) {
-                    for (ItemStackSnapshot snap : res.getRejectedItems()) {
-                        Item item = (Item) p.getWorld().createEntity(EntityTypes.ITEM, p.getLocation().getPosition());
-                        item.offer(Keys.REPRESENTED_ITEM, snap);
-                        p.getWorld().spawnEntity(item, Cause.source(EntitySpawnCause.builder().entity(item).type(SpawnTypes.PLUGIN).build()).build());
-                        p.sendMessage(Text.of("Not enough space in your inventory to fit the items!"));
+                    InventoryTransactionResult res = p.getInventory().offer(bought);
+                    if (!res.getRejectedItems().isEmpty()) {
+                        for (ItemStackSnapshot snap : res.getRejectedItems()) {
+                            Item item = (Item) p.getWorld().createEntity(EntityTypes.ITEM, p.getLocation().getPosition());
+                            item.offer(Keys.REPRESENTED_ITEM, snap);
+                            p.getWorld().spawnEntity(item, Cause.source(EntitySpawnCause.builder().entity(item).type(SpawnTypes.PLUGIN).build()).build());
+                            p.sendMessage(Text.of("Not enough space in your inventory to fit the items!"));
+                        }
                     }
+                    p.sendMessage(Text.of("Bought ", data.getAmount(), "x", data.getItem(), " for ", Text.of(currencies.stream().map(c -> c.format(data.getSellPrice().get(c))).toArray())));
+                } else {
+                    //TODO non-admin
                 }
-                p.sendMessage(Text.of("Bought ", data.getAmount(), "x", data.getItem(), " for ", Text.of(currencies.stream().map(c -> c.format(data.getSellPrice().get(c))).toArray())));
-            } else {
-                //TODO non-admin
             }
         }
     }
