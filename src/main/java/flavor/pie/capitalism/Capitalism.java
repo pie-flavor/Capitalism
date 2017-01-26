@@ -17,11 +17,15 @@ import org.spongepowered.api.data.Transaction;
 import org.spongepowered.api.data.key.Keys;
 import org.spongepowered.api.data.type.HandType;
 import org.spongepowered.api.data.type.HandTypes;
+import org.spongepowered.api.entity.EntityTypes;
+import org.spongepowered.api.entity.Item;
 import org.spongepowered.api.entity.living.player.Player;
 import org.spongepowered.api.event.Listener;
 import org.spongepowered.api.event.block.ChangeBlockEvent;
 import org.spongepowered.api.event.block.InteractBlockEvent;
 import org.spongepowered.api.event.cause.Cause;
+import org.spongepowered.api.event.cause.entity.spawn.EntitySpawnCause;
+import org.spongepowered.api.event.cause.entity.spawn.SpawnTypes;
 import org.spongepowered.api.event.filter.cause.First;
 import org.spongepowered.api.event.game.state.GameInitializationEvent;
 import org.spongepowered.api.event.game.state.GamePreInitializationEvent;
@@ -230,8 +234,8 @@ public class Capitalism {
     public void interact(InteractBlockEvent.Secondary e, @First Player p) {
         Location<World> block = e.getTargetBlock().getLocation().get();
         EconomyService svc = game.getServiceManager().provideUnchecked(EconomyService.class);
-        ShopData data = block.get(ShopData.class).get();
         if (testShop(p, block)) {
+            ShopData data = block.get(ShopData.class).get();
             if (data.getOwner().equals(p.getUniqueId())) {
                 //TODO test functionality
                 return;
@@ -314,7 +318,45 @@ public class Capitalism {
 
     @Listener
     public void interact(InteractBlockEvent.Primary e, @First Player p) {
-
+        Location<World> block = e.getTargetBlock().getLocation().get();
+        if (testShop(p, block)) {
+            ShopData data = block.get(ShopData.class).get();
+            EconomyService svc = game.getServiceManager().provideUnchecked(EconomyService.class);
+            if (data.getOwner().equals(p.getUniqueId())) {
+                //TODO test functionality
+                return;
+            }
+            if (data.isAdmin()) {
+                ItemStack bought = data.getItem().copy();
+                UniqueAccount acct = svc.getOrCreateAccount(p.getUniqueId()).get();
+                List<Currency> currencies = new ArrayList<>();
+                for (Currency currency : data.getSellPrice().keySet()) {
+                    TransactionResult res = acct.withdraw(currency, data.getSellPrice().get(currency), Cause.source(container).build());
+                    if (res.getResult() != ResultType.SUCCESS) {
+                        for (Currency currency2 : currencies) {
+                            acct.deposit(currency, data.getSellPrice().get(currency), Cause.source(container).build());
+                        }
+                        p.sendMessage(Text.of("Unable to pay ", currency.format(data.getSellPrice().get(currency)), "!"));
+                        e.setCancelled(true);
+                        return;
+                    } else {
+                        currencies.add(currency);
+                    }
+                }
+                InventoryTransactionResult res = p.getInventory().offer(bought);
+                if (!res.getRejectedItems().isEmpty()) {
+                    for (ItemStackSnapshot snap : res.getRejectedItems()) {
+                        Item item = (Item) p.getWorld().createEntity(EntityTypes.ITEM, p.getLocation().getPosition());
+                        item.offer(Keys.REPRESENTED_ITEM, snap);
+                        p.getWorld().spawnEntity(item, Cause.source(EntitySpawnCause.builder().entity(item).type(SpawnTypes.PLUGIN).build()).build());
+                        p.sendMessage(Text.of("Not enough space in your inventory to fit the items!"));
+                    }
+                }
+                p.sendMessage(Text.of("Bought ", data.getAmount(), "x", data.getItem(), " for ", Text.of(currencies.stream().map(c -> c.format(data.getSellPrice().get(c))).toArray())));
+            } else {
+                //TODO non-admin
+            }
+        }
     }
 
     private boolean testShop(Player p, Location<World> sign) {
