@@ -14,7 +14,6 @@ import org.spongepowered.api.command.CommandSource;
 import org.spongepowered.api.command.args.CommandContext;
 import org.spongepowered.api.command.args.GenericArguments;
 import org.spongepowered.api.command.spec.CommandSpec;
-import org.spongepowered.api.data.Transaction;
 import org.spongepowered.api.data.key.Keys;
 import org.spongepowered.api.data.manipulator.mutable.tileentity.SignData;
 import org.spongepowered.api.data.type.HandType;
@@ -23,7 +22,6 @@ import org.spongepowered.api.entity.EntityTypes;
 import org.spongepowered.api.entity.Item;
 import org.spongepowered.api.entity.living.player.Player;
 import org.spongepowered.api.event.Listener;
-import org.spongepowered.api.event.block.ChangeBlockEvent;
 import org.spongepowered.api.event.block.InteractBlockEvent;
 import org.spongepowered.api.event.block.tileentity.ChangeSignEvent;
 import org.spongepowered.api.event.cause.Cause;
@@ -436,6 +434,9 @@ public class Capitalism {
                 if (sellSize > 1) {
                     line3 = Text.of(TextColors.RED, "Right-click sign");
                     line4 = Text.of(TextColors.RED, "for sell details.");
+                } else if (sellSize == 0) {
+                    line3 = Text.of("This sign seems");
+                    line4 = Text.of("to have borked.");
                 } else {
                     line3 = Text.of(TextColors.RED, "Sell price:");
                     line4 = Text.of(TextColors.RED, sell.getKey().format(sell.getValue()));
