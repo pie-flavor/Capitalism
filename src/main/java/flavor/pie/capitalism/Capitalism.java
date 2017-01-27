@@ -459,6 +459,7 @@ public class Capitalism {
                         SignData signData = sign.getOrCreate(SignData.class).get();
                         signData.setElements(ImmutableList.of(user,  Text.of(data.getAmount(), "x", data.getItem()), line3, line4));
                         sign.offer(signData);
+                        sign.offer(data.asMutable());
                     }).submit(this);
         }
     }
