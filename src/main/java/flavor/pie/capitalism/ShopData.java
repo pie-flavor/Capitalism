@@ -16,6 +16,7 @@ import org.spongepowered.api.data.value.immutable.ImmutableMapValue;
 import org.spongepowered.api.data.value.immutable.ImmutableValue;
 import org.spongepowered.api.data.value.mutable.MapValue;
 import org.spongepowered.api.data.value.mutable.Value;
+import org.spongepowered.api.item.ItemTypes;
 import org.spongepowered.api.item.inventory.ItemStack;
 import org.spongepowered.api.item.inventory.ItemStackSnapshot;
 import org.spongepowered.api.service.economy.Currency;
@@ -44,7 +45,7 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
         amount = 0;
         admin = true;
         owner = ZERO_UUID;
-        item = null;
+        item = ItemStack.of(ItemTypes.STONE, 1);
     }
 
     ShopData(Map<Currency, BigDecimal> sellPrice, Map<Currency, BigDecimal> buyPrice, int amount, boolean admin, UUID owner, ItemStack item) {
@@ -177,7 +178,7 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
         container.getMap(ShopKeys.BUY_PRICE.getQuery()).ifPresent(m -> setBuyPrice(deserializeMap(m)));
         container.getMap(ShopKeys.SELL_PRICE.getQuery()).ifPresent(m -> setSellPrice(deserializeMap(m)));
         container.getObject(ShopKeys.OWNER.getQuery(), UUID.class).ifPresent(this::setOwner);
-        container.getObject(ShopKeys.ITEM_TYPE.getQuery(), ItemStackSnapshot.class).ifPresent(i -> setItem(i.createStack()));
+        container.getObject(ShopKeys.ITEM_TYPE.getQuery(), ItemStack.class).ifPresent(this::setItem);
         return Optional.of(this);
     }
 
@@ -204,7 +205,7 @@ public class ShopData extends AbstractData<ShopData, ShopData.Immutable> {
                 .set(ShopKeys.OWNER.getQuery(), owner)
                 .set(ShopKeys.BUY_PRICE.getQuery(), serializeMap(buyPrice))
                 .set(ShopKeys.SELL_PRICE.getQuery(), serializeMap(sellPrice))
-                .set(ShopKeys.ITEM_TYPE.getQuery(), item.createSnapshot());
+                .set(ShopKeys.ITEM_TYPE.getQuery(), item);
     }
 
     public static Map<String, String> serializeMap(Map<Currency, BigDecimal> map) {
