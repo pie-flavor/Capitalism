@@ -411,56 +411,55 @@ public class Capitalism {
     @Listener
     public void place(ChangeSignEvent e) {
         Sign sign = e.getTargetTile();
-            if (cachedLocs.containsKey(sign.getLocation())) {
-                ItemStackSnapshot itemSnap = cachedLocs.remove(sign.getLocation());
-                ShopData.Immutable data = itemSnap.get(ShopData.Immutable.class).get();
-                Text user = data.isAdmin() ? Text.of(TextColors.BLUE, "Admin Shop") : Text.of(TextColors.BLUE, game.getServiceManager().provideUnchecked(UserStorageService.class).get(data.getOwner()).get().getName());
-                Text line3;
-                Text line4;
-                int buySize = data.getBuyPrice().size();
-                int sellSize = data.getSellPrice().size();
-                Map.Entry<Currency, BigDecimal> buy = buySize == 1 ? data.getBuyPrice().entrySet().iterator().next() : null;
-                Map.Entry<Currency, BigDecimal> sell = sellSize == 1 ? data.getSellPrice().entrySet().iterator().next() : null;
-                if (buySize > 1) {
-                    if (sellSize > 1) {
-                        line3 = Text.of("Right-click sign");
-                        line4 = Text.of("for price details.");
-                    } else if (sellSize == 0) {
-                        line3 = Text.of(TextColors.GREEN, "Right-click sign");
-                        line4 = Text.of(TextColors.GREEN, "for buy details.");
-                    } else {
-                        line3 = Text.of(TextColors.GREEN, "R-Click for info");
-                        line4 = Text.of(TextColors.RED, sell.getKey().format(sell.getValue()));
-                    }
-                } else if (buySize == 0) {
-                    if (sellSize > 1) {
-                        line3 = Text.of(TextColors.RED, "Right-click sign");
-                        line4 = Text.of(TextColors.RED, "for sell details.");
-                    } else {
-                        line3 = Text.of(TextColors.RED, "Sell price:");
-                        line4 = Text.of(TextColors.RED, sell.getKey().format(sell.getValue()));
-                    }
+        if (cachedLocs.containsKey(sign.getLocation())) {
+            ItemStackSnapshot itemSnap = cachedLocs.remove(sign.getLocation());
+            ShopData.Immutable data = itemSnap.get(ShopData.Immutable.class).get();
+            Text user = data.isAdmin() ? Text.of(TextColors.BLUE, "Admin Shop") : Text.of(TextColors.BLUE, game.getServiceManager().provideUnchecked(UserStorageService.class).get(data.getOwner()).get().getName());
+            Text line3;
+            Text line4;
+            int buySize = data.getBuyPrice().size();
+            int sellSize = data.getSellPrice().size();
+            Map.Entry<Currency, BigDecimal> buy = buySize == 1 ? data.getBuyPrice().entrySet().iterator().next() : null;
+            Map.Entry<Currency, BigDecimal> sell = sellSize == 1 ? data.getSellPrice().entrySet().iterator().next() : null;
+            if (buySize > 1) {
+                if (sellSize > 1) {
+                    line3 = Text.of("Right-click sign");
+                    line4 = Text.of("for price details.");
+                } else if (sellSize == 0) {
+                    line3 = Text.of(TextColors.GREEN, "Right-click sign");
+                    line4 = Text.of(TextColors.GREEN, "for buy details.");
                 } else {
-                    if (sellSize > 1) {
-                        line3 = Text.of(TextColors.GREEN, buy.getKey().format(buy.getValue()));
-                        line4 = Text.of(TextColors.RED, "R-Click for info");
-                    } else if (sellSize == 0) {
-                        line3 = Text.of(TextColors.GREEN, "Buy price:");
-                        line4 = Text.of(TextColors.GREEN, buy.getKey().format(buy.getValue()));
-                    } else {
-                        line3 = Text.of(TextColors.GREEN, buy.getKey().format(buy.getValue()));
-                        line4 = Text.of(TextColors.RED, sell.getKey().format(sell.getValue()));
-                    }
+                    line3 = Text.of(TextColors.GREEN, "R-Click for info");
+                    line4 = Text.of(TextColors.RED, sell.getKey().format(sell.getValue()));
                 }
-                SignData signi = sign.getOrCreate(SignData.class).get();
-                signi.set(signi.lines().set(0, user));
-                signi.set(signi.lines().set(1, Text.of(data.getAmount(), "x",data.getItem())));
-                signi.set(signi.lines().set(2, line3));
-                signi.set(signi.lines().set(3, line4));
-                sign.offer(signi);
-                e.setCancelled(true);
+            } else if (buySize == 0) {
+                if (sellSize > 1) {
+                    line3 = Text.of(TextColors.RED, "Right-click sign");
+                    line4 = Text.of(TextColors.RED, "for sell details.");
+                } else {
+                    line3 = Text.of(TextColors.RED, "Sell price:");
+                    line4 = Text.of(TextColors.RED, sell.getKey().format(sell.getValue()));
+                }
+            } else {
+                if (sellSize > 1) {
+                    line3 = Text.of(TextColors.GREEN, buy.getKey().format(buy.getValue()));
+                    line4 = Text.of(TextColors.RED, "R-Click for info");
+                } else if (sellSize == 0) {
+                    line3 = Text.of(TextColors.GREEN, "Buy price:");
+                    line4 = Text.of(TextColors.GREEN, buy.getKey().format(buy.getValue()));
+                } else {
+                    line3 = Text.of(TextColors.GREEN, buy.getKey().format(buy.getValue()));
+                    line4 = Text.of(TextColors.RED, sell.getKey().format(sell.getValue()));
+                }
             }
-        //}
+            Task.builder()
+                    .delayTicks(1)
+                    .execute(() -> {
+                        SignData signData = sign.getOrCreate(SignData.class).get();
+                        signData.setElements(ImmutableList.of(user,  Text.of(data.getAmount(), "x", data.getItem()), line3, line4));
+                        sign.offer(signData);
+                    }).submit(this);
+        }
     }
 
 
