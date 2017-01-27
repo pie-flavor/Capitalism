@@ -3,6 +3,7 @@ package flavor.pie.capitalism;
 import com.google.common.collect.ImmutableList;
 import com.google.inject.Inject;
 import flavor.pie.util.arguments.MoreArguments;
+import org.slf4j.Logger;
 import org.spongepowered.api.Game;
 import org.spongepowered.api.block.BlockSnapshot;
 import org.spongepowered.api.block.BlockTypes;
@@ -65,6 +66,8 @@ public class Capitalism {
     Game game;
     @Inject
     PluginContainer container;
+    @Inject
+    Logger logger;
     Map<UUID, ShopCreationContainer> map = new HashMap<>();
 
     @Listener
@@ -87,7 +90,7 @@ public class Capitalism {
                         GenericArguments.optional(GenericArguments.catalogedElement(Text.of("currency"), Currency.class))
                 ).build();
         CommandSpec addSellPrice = CommandSpec.builder()
-                .executor(this::addBuyPrice)
+                .executor(this::addSellPrice)
                 .arguments(
                         MoreArguments.bigDecimal(Text.of("amount")),
                         GenericArguments.optional(GenericArguments.catalogedElement(Text.of("currency"), Currency.class))
@@ -178,11 +181,11 @@ public class Capitalism {
         if (amount.compareTo(BigDecimal.ZERO) < 0) {
             throw new CommandException(Text.of("Amount cannot be negative!"));
         } else if (amount.compareTo(BigDecimal.ZERO) == 0) {
-            map.get(p.getUniqueId()).buyPrice.remove(currency);
+            map.get(p.getUniqueId()).sellPrice.remove(currency);
             src.sendMessage(Text.of("Removed currency ", currency.getPluralDisplayName(), " from the selling price."));
             return CommandResult.success();
         } else {
-            map.get(p.getUniqueId()).buyPrice.put(currency, amount);
+            map.get(p.getUniqueId()).sellPrice.put(currency, amount);
             src.sendMessage(Text.of("Set the selling price for ", currency.getPluralDisplayName(), " to ", currency.format(amount), "."));
             return CommandResult.success();
         }
@@ -232,19 +235,21 @@ public class Capitalism {
     Map<Location<World>, ItemStackSnapshot> cachedLocs = new HashMap<>();
 
     @Listener
-    public void interact(InteractBlockEvent.Secondary e, @First Player p) {
+    public void interact(InteractBlockEvent.Secondary.MainHand e, @First Player p) {
         if (!(e.getTargetBlock() == BlockSnapshot.NONE)) {
             Location<World> block = e.getTargetBlock().getLocation().get();
             EconomyService svc = game.getServiceManager().provideUnchecked(EconomyService.class);
             if (testShop(p, block)) {
                 ShopData data = block.get(ShopData.class).get();
+                if (data.getSellPrice().isEmpty()) {
+                    return;
+                }
                 if (data.getOwner().equals(p.getUniqueId()) && !data.isAdmin()) {
                     //TODO test functionality
                     return;
                 }
                 if (testHeldItem(p, data)) {
                     if (data.isAdmin()) {
-                        e.setUseBlockResult(Tristate.FALSE);
                         e.setUseItemResult(Tristate.FALSE);
                         UniqueAccount acct = svc.getOrCreateAccount(p.getUniqueId()).get();
                         List<Currency> currencies = new ArrayList<>();
@@ -252,7 +257,7 @@ public class Capitalism {
                             TransactionResult res = acct.deposit(currency, data.getSellPrice().get(currency), Cause.source(container).build());
                             if (res.getResult() != ResultType.SUCCESS) {
                                 for (Currency currency2 : currencies) {
-                                    acct.withdraw(currency, data.getSellPrice().get(currency), Cause.source(container).build());
+                                    acct.withdraw(currency2, data.getSellPrice().get(currency2), Cause.source(container).build());
                                 }
                                 p.sendMessage(Text.of("Unable to give you ", currency.format(data.getSellPrice().get(currency)), "!"));
                                 e.setCancelled(true);
@@ -272,7 +277,6 @@ public class Capitalism {
                         //                        Location<World> chest = block.getRelative(block.get(Keys.DIRECTION).get().getOpposite());
                         //                        if (testShopChest(p, block, chest)) {
                         //                            Inventory inv = ((Carrier) block.getRelative(block.get(Keys.DIRECTION).get().getOpposite()).getTileEntity().get()).getInventory();
-                        //                            e.setUseBlockResult(Tristate.FALSE);
                         //                            e.setUseItemResult(Tristate.FALSE);
                         //                            ItemStack sold = p.getItemInHand(HandTypes.MAIN_HAND).get();
                         //                            ItemStack test = sold.copy();
@@ -308,12 +312,9 @@ public class Capitalism {
                     }
                 }
             }
-            if (p.getItemInHand(e.getHandType()).map(f -> f.get(ShopData.class)).isPresent()) {
+            if (p.getItemInHand(e.getHandType()).map(f -> f.get(ShopData.class)).isPresent() && p.getItemInHand(e.getHandType()).get().getItem().equals(ItemTypes.SIGN)) {
                 Location<World> loc = block.getBlockRelative(e.getTargetSide());
                 cachedLocs.put(loc, p.getItemInHand(e.getHandType()).get().createSnapshot());
-                Task.builder()
-                        .delayTicks(1)
-                        .execute(() -> cachedLocs.remove(loc));
             }
 
         }
@@ -324,21 +325,25 @@ public class Capitalism {
             Location<World> block = e.getTargetBlock().getLocation().get();
             if (testShop(p, block)) {
                 ShopData data = block.get(ShopData.class).get();
+                if (data.getBuyPrice().isEmpty()) {
+                    return;
+                }
                 if (p.get(Keys.IS_SNEAKING).get()) {
                     EconomyService svc = game.getServiceManager().provideUnchecked(EconomyService.class);
-                    if (data.getOwner().equals(p.getUniqueId())) {
+                    if (data.getOwner().equals(p.getUniqueId()) && !data.isAdmin()) {
                         //TODO test functionality
                         return;
                     }
                     if (data.isAdmin()) {
                         ItemStack bought = data.getItem().copy();
+                        bought.setQuantity(data.getAmount());
                         UniqueAccount acct = svc.getOrCreateAccount(p.getUniqueId()).get();
                         List<Currency> currencies = new ArrayList<>();
-                        for (Currency currency : data.getSellPrice().keySet()) {
-                            TransactionResult res = acct.withdraw(currency, data.getSellPrice().get(currency), Cause.source(container).build());
+                        for (Currency currency : data.getBuyPrice().keySet()) {
+                            TransactionResult res = acct.withdraw(currency, data.getBuyPrice().get(currency), Cause.source(container).build());
                             if (res.getResult() != ResultType.SUCCESS) {
                                 for (Currency currency2 : currencies) {
-                                    acct.deposit(currency, data.getSellPrice().get(currency), Cause.source(container).build());
+                                    acct.deposit(currency2, data.getSellPrice().get(currency2), Cause.source(container).build());
                                 }
                                 p.sendMessage(Text.of("Unable to pay ", currency.format(data.getSellPrice().get(currency)), "!"));
                                 e.setCancelled(true);
@@ -356,9 +361,8 @@ public class Capitalism {
                                 p.sendMessage(Text.of("Not enough space in your inventory to fit the items!"));
                             }
                         }
-                        p.sendMessage(Text.of("Bought ", data.getAmount(), "x", data.getItem(), " for ", Text.of(currencies.stream().map(c -> c.format(data.getSellPrice().get(c))).toArray())));
+                        p.sendMessage(Text.of("Bought ", data.getAmount(), "x", data.getItem(), " for ", Text.of(currencies.stream().map(c -> c.format(data.getBuyPrice().get(c))).toArray())));
                     } else {
-                        //TODO non-admin
                     }
                 }
             }
@@ -407,10 +411,13 @@ public class Capitalism {
     }
 
     @Listener
-    public void place(ChangeSignEvent e) {
+    public void change(ChangeSignEvent e) {
         Sign sign = e.getTargetTile();
         if (cachedLocs.containsKey(sign.getLocation())) {
             ItemStackSnapshot itemSnap = cachedLocs.remove(sign.getLocation());
+            if (!sign.getLocation().getBlockType().equals(BlockTypes.WALL_SIGN)) {
+                return;
+            }
             ShopData.Immutable data = itemSnap.get(ShopData.Immutable.class).get();
             Text user = data.isAdmin() ? Text.of(TextColors.BLUE, "Admin Shop") : Text.of(TextColors.BLUE, game.getServiceManager().provideUnchecked(UserStorageService.class).get(data.getOwner()).get().getName());
             Text line3;
@@ -463,6 +470,5 @@ public class Capitalism {
                     }).submit(this);
         }
     }
-
 
 }
